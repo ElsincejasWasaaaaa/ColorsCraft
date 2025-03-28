@@ -12,11 +12,22 @@ def cargar_datos(nombre_archivo, columnas):
 def guardar_datos(df, nombre_archivo):
     df.to_csv(nombre_archivo, index=False)
 
+# Inicializar session_state para mensajes
+if 'mensaje' not in st.session_state:
+    st.session_state.mensaje = ""
+if 'cantidad_restar' not in st.session_state:
+    st.session_state.cantidad_restar = {}
+
 # Cargar inventario y RUCs
 df_inventario = cargar_datos("inventario.csv", ["id", "nombre", "tipo", "cantidad", "precio"])
 df_ruc = cargar_datos("rucs.csv", ["RUC", "Empresa"])
 
 st.title("📦 Inventario y Empresas 🎨")
+
+# Mostrar mensaje si existe
+if st.session_state.mensaje:
+    st.success(st.session_state.mensaje)
+    st.session_state.mensaje = ""
 
 # Barra lateral para navegación
 opcion = st.sidebar.radio("Selecciona una opción", ["Agregar Producto", "Ver Inventario", "Agregar RUC", "Ver Lista de RUCs"])
@@ -35,7 +46,7 @@ if opcion == "Agregar Producto":
             nuevo_producto = pd.DataFrame([{ "id": nuevo_id, "nombre": nombre, "tipo": tipo, "cantidad": cantidad, "precio": precio }])
             df_inventario = pd.concat([df_inventario, nuevo_producto], ignore_index=True)
             guardar_datos(df_inventario, "inventario.csv")
-            st.toast("✅ Producto agregado exitosamente")
+            st.session_state.mensaje = "✅ Producto agregado exitosamente"
             st.rerun()
 
 elif opcion == "Ver Inventario":
@@ -48,17 +59,26 @@ elif opcion == "Ver Inventario":
             with st.expander(f"{row['nombre']} ({row['tipo']}) - Cantidad: {row['cantidad']} - 💲{row['precio']}"):
                 col1, col2 = st.columns(2)
                 if row["cantidad"] > 0:
-                    cantidad_restar = col1.number_input("Restar cantidad", min_value=1, max_value=row["cantidad"], step=1, key=f"restar_{row['id']}")
+                    key_cantidad = f"restar_{row['id']}"
+                    max_cantidad = row["cantidad"]
+                    if key_cantidad not in st.session_state.cantidad_restar or st.session_state.cantidad_restar[key_cantidad] > max_cantidad:
+                        st.session_state.cantidad_restar[key_cantidad] = 1
+                    
+                    cantidad_restar = col1.number_input(
+                        "Restar cantidad", min_value=1, max_value=max_cantidad, step=1, 
+                        key=key_cantidad, value=st.session_state.cantidad_restar[key_cantidad]
+                    )
+                    
                     if col1.button("➖ Restar", key=f"del_{row['id']}"):
                         df_inventario.loc[df_inventario["id"] == row["id"], "cantidad"] -= cantidad_restar
                         guardar_datos(df_inventario, "inventario.csv")
-                        st.toast("✅ Cantidad restada")
+                        st.session_state.mensaje = "✅ Cantidad restada"
                         st.rerun()
                 
                 if col2.button("❌ Eliminar Producto", key=f"remove_{row['id']}"):
                     df_inventario = df_inventario[df_inventario["id"] != row["id"]]
                     guardar_datos(df_inventario, "inventario.csv")
-                    st.toast("🚨 Producto eliminado")
+                    st.session_state.mensaje = "🚨 Producto eliminado"
                     st.rerun()
     else:
         st.write("🚨 No hay productos en el inventario con este filtro.")
@@ -72,13 +92,13 @@ elif opcion == "Agregar RUC":
 
         if submitted:
             if ruc in df_ruc["RUC"].values:
-                st.toast("⚠️ Este RUC ya está registrado")
+                st.session_state.mensaje = "⚠️ Este RUC ya está registrado"
             else:
                 nuevo_ruc = pd.DataFrame([{ "RUC": ruc, "Empresa": empresa }])
                 df_ruc = pd.concat([df_ruc, nuevo_ruc], ignore_index=True)
                 guardar_datos(df_ruc, "rucs.csv")
-                st.toast("✅ RUC agregado exitosamente")
-                st.rerun()
+                st.session_state.mensaje = "✅ RUC agregado exitosamente"
+            st.rerun()
 
 elif opcion == "Ver Lista de RUCs":
     st.header("🏢 Lista de Empresas y sus RUCs")
